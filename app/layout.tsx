@@ -7,8 +7,8 @@ import "./globals.css";
 const isHosted = process.env.NEXT_PUBLIC_APP_MODE === 'hosted';
 
 export const metadata: Metadata = {
-  title: "OpenBurner",
-  description: "Start using OpenBurner",
+  title: "OpenBurner dGEN1 Edition",
+  description: "OpenBurner wallet optimized for dGEN1 devices - Powered by ethOS4",
   icons: {
     icon: '/openburnerlogo.ico',
   },
@@ -38,7 +38,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#FF6B35',
+  themeColor: '#00FF88', // dGEN1 brand color
 };
 
 export default function RootLayout({
@@ -53,7 +53,7 @@ export default function RootLayout({
         {isHosted && (
           <>
             <link rel="manifest" href="/manifest.json" />
-            <meta name="theme-color" content="#FF6B35" />
+            <meta name="theme-color" content="#00FF88" />
             <meta name="apple-mobile-web-app-capable" content="yes" />
             <meta name="apple-mobile-web-app-status-bar-style" content="default" />
             <meta name="apple-mobile-web-app-title" content="OpenBurner" />

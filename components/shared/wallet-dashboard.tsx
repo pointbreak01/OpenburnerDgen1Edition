@@ -260,13 +260,32 @@ export function WalletDashboard() {
 
   return (
     <div className="space-y-3">
+      {/* dGEN1 Branding Header */}
+      <div className="flex items-center justify-between px-1 py-2 mb-2 border-b border-slate-200 dark:border-dgen1-border">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-brand-primary/10 via-brand-secondary/10 to-brand-accent/10 dark:from-brand-primary/20 dark:via-brand-secondary/20 dark:to-brand-accent/20 border border-brand-primary/20 dark:border-brand-primary/30">
+            <span className="text-xs font-bold tracking-wider text-brand-primary dark:text-brand-primary">
+              dGEN1
+            </span>
+            <span className="text-[10px] font-medium text-slate-600 dark:text-dgen1-text-muted tracking-tight">
+              EDITION
+            </span>
+          </div>
+          <div className="h-4 w-px bg-slate-300 dark:bg-dgen1-border"></div>
+          <span className="text-[10px] font-medium text-slate-500 dark:text-dgen1-text-muted uppercase tracking-wider">
+            Powered by ethOS4
+          </span>
+        </div>
+        <ThemeToggle />
+      </div>
+
       {/* Header with Network, Theme Toggle & Disconnect */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative network-dropdown">
             <button
               onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-card hover:shadow-card-hover hover:border-brand-orange/30 dark:hover:border-brand-orange/40 transition-all"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover hover:border-brand-orange/30 dark:hover:border-brand-primary/40 transition-all"
             >
               <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100">
                 {(() => {
@@ -290,12 +309,12 @@ export function WalletDashboard() {
                   );
                 })()}
               </div>
-              <span className="font-semibold text-base text-slate-900 dark:text-slate-100">{chainName}</span>
+              <span className="font-semibold text-base text-slate-900 dark:text-dgen1-text">{chainName}</span>
               <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${showNetworkDropdown ? "rotate-180" : ""}`} />
             </button>
           
           {showNetworkDropdown && (
-            <div className="absolute left-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-card-lg z-50 p-2 max-h-96 overflow-y-auto">
+            <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-dgen1-surface rounded-xl border border-slate-200 dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card z-50 p-2 max-h-96 overflow-y-auto">
                   <div className="mb-1 px-3 py-2">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Networks</p>
                   </div>
@@ -306,8 +325,8 @@ export function WalletDashboard() {
                         onClick={() => handleChainSelect(chain)}
                         className={`w-full text-left px-3 py-2.5 rounded-lg transition-all text-xs flex items-center gap-3 ${
                           chainId === chain.chainId
-                            ? "bg-brand-orange text-white shadow-sm"
-                            : "hover:bg-slate-50 text-slate-900"
+                            ? "bg-brand-orange dark:bg-brand-primary text-white dark:text-dgen1-bg shadow-sm dark:shadow-glow-primary"
+                            : "hover:bg-slate-50 dark:hover:bg-dgen1-surface-hover text-slate-900 dark:text-dgen1-text"
                         }`}
                       >
                         <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 overflow-hidden ${
@@ -389,14 +408,11 @@ export function WalletDashboard() {
             </div>
           )}
           </div>
-          
-          {/* Theme Toggle */}
-          <ThemeToggle />
         </div>
 
         <button
           onClick={disconnect}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 shadow-card hover:shadow-card-hover transition-all"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border text-slate-600 dark:text-dgen1-text-muted hover:text-slate-900 dark:hover:text-brand-primary hover:border-slate-300 dark:hover:border-brand-primary/40 shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-all"
           title="Disconnect"
         >
           <LogOut className="w-4 h-4" strokeWidth={2.5} />
@@ -412,19 +428,19 @@ export function WalletDashboard() {
       )}
 
       {/* Main Balance Card */}
-      <div className="bg-gradient-to-b from-white to-bg-base dark보다from-slate-800 dark:to-slate-800 rounded-2xl border border-black/[0.04] dark:border-slate-700 shadow-card-lg hover:shadow-card-hover transition-shadow p-5">
+      <div className="bg-gradient-to-b from-white to-bg-base dark:from-dgen1-surface dark:to-dgen1-surface rounded-2xl border border-black/[0.04] dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-shadow p-5">
           {/* Address Bar */}
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-dgen1-border">
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF6B35] flex-shrink-0 shadow-sm">
-                <div className="w-5 h-5 rounded-full bg-white dark:bg-slate-800" />
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF6B35] dark:bg-brand-primary flex-shrink-0 shadow-sm dark:shadow-glow-primary">
+                <div className="w-5 h-5 rounded-full bg-white dark:bg-dgen1-bg" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-0.5">
+                <p className="text-xs text-slate-500 dark:text-dgen1-text-muted font-medium mb-0.5">
                   {isSmartWallet ? 'Smart Wallet Address' : 'Burner Card Address'}
                 </p>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono font-semibold text-slate-900 dark:text-slate-100 token-opacity truncate">
+                  <p className="text-sm font-mono font-semibold text-slate-900 dark:text-dgen1-text token-opacity truncate">
                     {isSmartWallet && smartWalletAddress ? formatAddress(smartWalletAddress) : address ? formatAddress(address) : ""}
                   </p>
                   <button
@@ -438,7 +454,7 @@ export function WalletDashboard() {
                         setTimeout(() => setCopied(false), 2000);
                       }
                     }}
-                    className="text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 transition-colors flex-shrink-0"
+                    className="text-slate-400 dark:text-dgen1-text-muted hover:text-slate-900 dark:hover:text-brand-primary transition-colors flex-shrink-0"
                     title={copied ? "Copied!" : "Copy address"}
                   >
                     {copied ? (
@@ -465,7 +481,7 @@ export function WalletDashboard() {
           <div className="mb-4">
             <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mb-1.5 uppercase tracking-wide text-xs opacity-60">Total Balance</p>
             <div className="flex items-baseline gap-2.5 mb-1">
-              <p className="text-4xl font-bold text-slate-900 dark:text-slate-100 balance-number">
+              <p className="text-4xl font-bold text-slate-900 dark:text-dgen1-text balance-number">
                 {isLoadingBalance ? (
                   <span className="text-slate-300 dark:text-slate-600">...</span>
                 ) : (

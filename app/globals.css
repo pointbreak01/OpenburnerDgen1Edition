@@ -6,6 +6,13 @@
   --foreground: #1E1E1E;
   --background: #FAFAFA;
   --brand-orange: #E4572E;
+  /* dGEN1 brand colors */
+  --brand-primary: #00FF88;
+  --brand-secondary: #0066FF;
+  --brand-accent: #FF0066;
+  --dgen1-bg: #0A0A0A;
+  --dgen1-surface: #121212;
+  --dgen1-border: #1F1F1F;
 }
 
 html,
