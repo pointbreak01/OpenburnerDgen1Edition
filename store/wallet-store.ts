@@ -35,8 +35,8 @@ interface WalletState {
 }
 
 export const useWalletStore = create<WalletState>()(
-  persist(
-    (set) => ({
+  persist<WalletState>(
+    (set, get) => ({
       address: null,
       publicKey: null,
       keySlot: null,
@@ -107,7 +107,7 @@ export const useWalletStore = create<WalletState>()(
         }
       },
       getActiveWalletAddress: () => {
-        const state = useWalletStore.getState();
+        const state = get();
         if (state.activeWalletType === 'smart' && state.activeSmartWalletAddress) {
           return state.activeSmartWalletAddress;
         }
@@ -116,7 +116,7 @@ export const useWalletStore = create<WalletState>()(
       disconnect: () => {
         console.log("🔌 [Wallet Store] DISCONNECT called");
         console.log("  Current state before disconnect:");
-        const currentState = useWalletStore.getState();
+        const currentState = get();
         console.log(`    Address: ${currentState.address}`);
         console.log(`    Public Key: ${currentState.publicKey}`);
         console.log(`    Key Slot: ${currentState.keySlot}`);
