@@ -667,7 +667,9 @@ export async function findSmartWallets(
       
       if (wallets.length > 0) {
         console.log(`\n✅ [API] Found ${wallets.length} Smart Wallet(s) via API:`);
-        wallets.forEach(w => console.log(`   • ${w.address}`));
+        wallets.forEach((w: { address: string; nonce: number; version: string; exists: boolean }) =>
+          console.log(`   • ${w.address}`)
+        );
         return wallets;
       }
     }
