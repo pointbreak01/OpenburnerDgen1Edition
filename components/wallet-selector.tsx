@@ -27,7 +27,7 @@ export function WalletSelector({ compact = false, showLabel = true }: WalletSele
       address: address,
       label: 'Burner Card',
     },
-    ...availableSmartWallets.map((smartWallet, index) => ({
+    ...availableSmartWallets.map((smartWallet: string, index: number) => ({
       type: 'smart' as WalletType,
       address: smartWallet,
       label: availableSmartWallets.length > 1 ? `Smart Wallet ${index + 1}` : 'Smart Wallet',
