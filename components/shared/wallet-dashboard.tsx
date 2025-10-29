@@ -273,7 +273,7 @@ export function WalletDashboard() {
           </div>
           <div className="h-4 w-px bg-slate-300 dark:bg-dgen1-border"></div>
           <span className="text-[10px] font-medium text-slate-500 dark:text-dgen1-text-muted uppercase tracking-wider">
-            Powered by ethOS4
+            Forked by pointbreak
           </span>
         </div>
         <ThemeToggle />
