@@ -818,7 +818,7 @@ export function createAddOwnerTransaction(
   
   return {
     target: smartWalletAddress,
-    value: '0',
+    value: 0n,
     data: data,
   };
 }
@@ -845,7 +845,7 @@ export function createRemoveOwnerTransaction(
   
   return {
     target: smartWalletAddress,
-    value: '0',
+    value: 0n,
     data: data,
   };
 }
