@@ -702,7 +702,9 @@ export async function findSmartWallets(
     for (let nonce = 0; nonce < maxNonce; nonce++) {
       try {
         // Compute the deterministic address for this owner + nonce
-        const predictedAddress = await factory.getAddress([ownerAddress], nonce);
+        // Avoid name clash with ethers.Contract.getAddress() by using getFunction
+        const getAddressFn = factory.getFunction("getAddress");
+        const predictedAddress = await getAddressFn([ownerAddress], nonce);
         
         // Check if wallet exists (has code deployed)
         const code = await provider.getCode(predictedAddress);
