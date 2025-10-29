@@ -226,7 +226,7 @@ export const ENS_CONTRACTS = {
  */
 export function isENSContract(contractAddress: string, chainId: number): boolean {
   const ensAddress = ENS_CONTRACTS[chainId as keyof typeof ENS_CONTRACTS];
-  return ensAddress && contractAddress.toLowerCase() === ensAddress.toLowerCase();
+  return ensAddress ? contractAddress.toLowerCase() === ensAddress.toLowerCase() : false;
 }
 
 /**
