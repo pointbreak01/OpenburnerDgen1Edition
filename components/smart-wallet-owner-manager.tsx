@@ -291,18 +291,18 @@ export function SmartWalletOwnerManager() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-xs font-mono text-slate-900 dark:text-white break-all flex-1">
-                            {owner.address}
+                            {owner.index === 0 ? owner.publicKey : owner.address}
                           </p>
                           <button
-                            onClick={() => copyAddress(owner.address)}
+                            onClick={() => copyAddress(owner.index === 0 ? owner.publicKey : owner.address)}
                             className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors"
-                            title="Copy address"
+                            title={owner.index === 0 ? "Copy uint256" : "Copy address"}
                           >
                             <Copy className="w-3 h-3" />
                           </button>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Index: {owner.index}
+                          {owner.index === 0 ? "uint256 (bytes)" : `Index: ${owner.index} • Address: ${formatAddress(owner.address)}`}
                         </p>
                       </div>
                     </div>
