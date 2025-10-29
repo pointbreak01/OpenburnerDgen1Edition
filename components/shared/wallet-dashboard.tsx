@@ -1,0 +1,690 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import { useWalletStore } from "@/store/wallet-store";
+import { TokenList } from "../token-list";
+import { SendToken } from "../send-token";
+import { TokenSelector } from "../token-selector";
+import { Toast } from "../toast";
+import { SmartWalletConfig } from "../smart-wallet-config";
+import { NFTManager } from "../nft-manager";
+import { WalletSelector } from "../wallet-selector";
+import { SmartWalletOwnerManager } from "../smart-wallet-owner-manager";
+import { ethers } from "ethers";
+import { Copy, LogOut, CheckCircle, ChevronDown, Plus, Network, Send, Download, Repeat2, QrCode, ExternalLink, X, Wallet } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import { getTokenPrice } from "@/lib/price-oracle";
+import { getAppConfig } from "@/lib/config/environment";
+import { ThemeToggle } from "@/components/common/theme-toggle";
+import Image from "next/image";
+
+interface Token {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  balance: string;
+}
+
+
+interface Chain {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  logo: string;
+}
+
+const POPULAR_CHAINS: Chain[] = [
+  { chainId: 1, name: "Ethereum", rpcUrl: "https://eth.llamarpc.com", logo: "https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg" },
+  { chainId: 8453, name: "Base", rpcUrl: "https://mainnet.base.org", logo: "https://icons.llamao.fi/icons/chains/rsz_base.jpg" },
+  { chainId: 56, name: "BNB Chain", rpcUrl: "https://bsc-dataseed1.binance.org", logo: "https://icons.llamao.fi/icons/chains/rsz_binance.jpg" },
+  { chainId: 42161, name: "Arbitrum One", rpcUrl: "https://arb1.arbitrum.io/rpc", logo: "https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg" },
+  { chainId: 43114, name: "Avalanche", rpcUrl: "https://api.avax.network/ext/bc/C/rpc", logo: "https://icons.llamao.fi/icons/chains/rsz_avalanche.jpg" },
+  { chainId: 81457, name: "Blast", rpcUrl: "https://rpc.blast.io", logo: "https://icons.llamao.fi/icons/chains/rsz_blast.jpg" },
+  { chainId: 59144, name: "Linea Mainnet", rpcUrl: "https://rpc.linea.build", logo: "https://icons.llamao.fi/icons/chains/rsz_linea.jpg" },
+  { chainId: 5000, name: "Mantle", rpcUrl: "https://rpc.mantle.xyz", logo: "https://icons.llamao.fi/icons/chains/rsz_mantle.jpg" },
+  { chainId: 34443, name: "Mode Mainnet", rpcUrl: "https://mainnet.mode.network", logo: "https://icons.llamao.fi/icons/chains/rsz_mode.jpg" },
+  { chainId: 10, name: "OP Mainnet", rpcUrl: "https://mainnet.optimism.io", logo: "https://icons.llamao.fi/icons/chains/rsz_optimism.jpg" },
+  { chainId: 137, name: "Polygon", rpcUrl: "https://polygon-rpc.com", logo: "https://icons.llamao.fi/icons/chains/rsz_polygon.jpg" },
+  { chainId: 534352, name: "Scroll", rpcUrl: "https://rpc.scroll.io", logo: "https://icons.llamao.fi/icons/chains/rsz_scroll.jpg" },
+  { chainId: 1301, name: "Unichain", rpcUrl: "https://sepolia.unichain.org", logo: "https://icons.llamao.fi/icons/chains/rsz_unichain.jpg" },
+];
+
+function getNativeTokenSymbol(chainId: number): string {
+  switch (chainId) {
+    case 56: // BNB Chain
+      return "BNB";
+    case 137: // Polygon
+      return "MATIC";
+    case 43114: // Avalanche
+      return "AVAX";
+    case 5000: // Mantle
+      return "MNT";
+    default:
+      return "ETH";
+  }
+}
+
+// Block explorer URLs for each chain
+const BLOCK_EXPLORERS: Record<number, string> = {
+  1: "https://etherscan.io",
+  8453: "https://basescan.org",
+  56: "https://bscscan.com",
+  42161: "https://arbiscan.io",
+  43114: "https://snowtrace.io",
+  81457: "https://blastscan.io",
+  59144: "https://lineascan.build",
+  5000: "https://explorer.mantle.xyz",
+  34443: "https://explorer.mode.network",
+  10: "https://optimistic.etherscan.io",
+  137: "https://polygonscan.com",
+  534352: "https://scrollscan.com",
+  1301: "https://unichain-sepolia.blockscout.com",
+};
+
+export function WalletDashboard() {
+  const { address, balance, rpcUrl, chainName, chainId, disconnect, setBalance, setChain, publicKey, keySlot, activeWalletType, activeSmartWalletAddress, availableSmartWallets } =
+    useWalletStore();
+  
+  // Backward compatibility
+  const isSmartWallet = activeWalletType === 'smart';
+  const smartWalletAddress = activeSmartWalletAddress;
+  const { pricingEnabled } = getAppConfig();
+  const [smartWalletBalance, setSmartWalletBalance] = useState("0");
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customRpc, setCustomRpc] = useState("");
+  const [customChainId, setCustomChainId] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [receiveAddressCopied, setReceiveAddressCopied] = useState(false);
+  const [nativeTokenPrice, setNativeTokenPrice] = useState<number>(0);
+  const customFormRef = useRef<HTMLDivElement>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [showTokenSelector, setShowTokenSelector] = useState(false);
+  const [availableTokens, setAvailableTokens] = useState<Token[]>([]);
+  const [tokenImages, setTokenImages] = useState<{ [symbol: string]: string }>({});
+  const [tokenPrices, setTokenPrices] = useState<{ [symbol: string]: number }>({});
+
+  useEffect(() => {
+    console.log("\n═══════════════════════════════════════════════════════");
+    console.log("📊 [WalletDashboard] COMPONENT MOUNTED/UPDATED");
+    console.log("═══════════════════════════════════════════════════════");
+    console.log("Current wallet state:");
+    console.log(`  Address: ${address}`);
+    console.log(`  Public Key: ${publicKey?.substring(0, 40)}...`);
+    console.log(`  Key Slot: ${keySlot}`);
+    console.log(`  Chain: ${chainName} (${chainId})`);
+    console.log(`  RPC URL: ${rpcUrl}`);
+    console.log(`  Balance: ${balance}`);
+    console.log("═══════════════════════════════════════════════════════\n");
+    
+    if (address && rpcUrl) {
+      loadBalance();
+    }
+  }, [address, rpcUrl, activeWalletType, activeSmartWalletAddress]);
+
+  useEffect(() => {
+    // Load price for the native token when chain changes
+    loadNativeTokenPrice();
+  }, [chainId]);
+
+  async function loadNativeTokenPrice() {
+    try {
+      const symbol = getNativeTokenSymbol(chainId);
+      console.log(`💰 Fetching price for ${symbol}...`);
+      const price = await getTokenPrice(symbol);
+      console.log(`✅ ${symbol} price: $${price}`);
+      setNativeTokenPrice(price);
+    } catch (err) {
+      console.error("Error loading native token price:", err);
+      setNativeTokenPrice(0);
+    }
+  }
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (showNetworkDropdown && !target.closest('.network-dropdown')) {
+        setShowNetworkDropdown(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNetworkDropdown]);
+
+  async function loadBalance() {
+    if (!address || !rpcUrl) return;
+
+    setIsLoadingBalance(true);
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      
+      // Determine which wallet address to check
+      const walletToCheck = isSmartWallet && smartWalletAddress ? smartWalletAddress : address;
+      console.log(`💰 Loading balance for: ${walletToCheck} (${isSmartWallet ? 'Smart Wallet' : 'Burner Card'})`);
+      
+      // Load balance for the active wallet
+      const balanceWei = await provider.getBalance(walletToCheck);
+      const balanceEth = ethers.formatEther(balanceWei);
+      setBalance(balanceEth);
+      console.log(`💰 Balance loaded: ${balanceEth} ${getNativeTokenSymbol(chainId)}`);
+      
+      // Always load Burner card balance separately for reference
+      const burnerBalanceWei = await provider.getBalance(address);
+      const burnerBalanceEth = ethers.formatEther(burnerBalanceWei);
+      console.log(`💰 Burner card balance: ${burnerBalanceEth} ${getNativeTokenSymbol(chainId)}`);
+      
+      // Load Smart Wallet balance separately if it's different from active wallet
+      if (smartWalletAddress && smartWalletAddress !== walletToCheck) {
+        try {
+          const smartWalletBalanceWei = await provider.getBalance(smartWalletAddress);
+          const smartWalletBalanceEth = ethers.formatEther(smartWalletBalanceWei);
+          setSmartWalletBalance(smartWalletBalanceEth);
+          console.log(`💼 [Smart Wallet] Balance: ${smartWalletBalanceEth} ETH`);
+        } catch (error) {
+          console.error("Error loading Smart Wallet balance:", error);
+          setSmartWalletBalance("0");
+        }
+      } else {
+        setSmartWalletBalance(burnerBalanceEth);
+      }
+      
+      // Also refresh the price when loading balance
+      await loadNativeTokenPrice();
+    } catch (error) {
+      console.error("Error loading balance:", error);
+      setBalance("0");
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  }
+
+  function formatAddress(addr: string) {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  }
+
+  function handleCopyAddress() {
+    console.log('handleCopyAddress called');
+    navigator.clipboard.writeText(address || "");
+    setCopied(true);
+    setToastMessage("Address copied!");
+    setShowToast(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function formatBalance(balance: string): string {
+    const num = parseFloat(balance);
+    if (num === 0) return "0";
+    if (num < 0.0001) return num.toFixed(8);
+    if (num < 1) return num.toFixed(6);
+    if (num < 1000) return num.toFixed(4);
+    return num.toFixed(2);
+  }
+
+  function handleChainSelect(chain: Chain) {
+    setChain(chain.chainId, chain.rpcUrl, chain.name);
+    setShowNetworkDropdown(false);
+    setShowCustomForm(false);
+  }
+
+  function handleCustomChain() {
+    if (!customRpc || !customChainId || !customName) return;
+
+    setChain(parseInt(customChainId), customRpc, customName);
+    setCustomRpc("");
+    setCustomChainId("");
+    setCustomName("");
+    setShowCustomForm(false);
+    setShowNetworkDropdown(false);
+  }
+
+  function getExplorerUrl(chainId: number, address: string): string {
+    const baseUrl = BLOCK_EXPLORERS[chainId] || "https://etherscan.io";
+    return `${baseUrl}/address/${address}`;
+  }
+
+  function handleCopyReceiveAddress() {
+    console.log('handleCopyReceiveAddress called');
+    navigator.clipboard.writeText(address || "");
+    setReceiveAddressCopied(true);
+    setToastMessage("Address copied!");
+    setShowToast(true);
+    setTimeout(() => setReceiveAddressCopied(false), 2000);
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Header with Network, Theme Toggle & Disconnect */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="relative network-dropdown">
+            <button
+              onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-card hover:shadow-card-hover hover:border-brand-orange/30 dark:hover:border-brand-orange/40 transition-all"
+            >
+              <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100">
+                {(() => {
+                  const chain = POPULAR_CHAINS.find(c => c.chainId === chainId);
+                  return chain?.logo ? (
+                    <img 
+                      src={chain.logo} 
+                      alt={chainName}
+                      className="w-4 h-4 object-cover rounded-full"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<span class="text-[9px] font-bold text-slate-700">${chainName[0]}</span>`;
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="text-[9px] font-bold text-slate-700">{chainName[0]}</span>
+                  );
+                })()}
+              </div>
+              <span className="font-semibold text-base text-slate-900 dark:text-slate-100">{chainName}</span>
+              <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${showNetworkDropdown ? "rotate-180" : ""}`} />
+            </button>
+          
+          {showNetworkDropdown && (
+            <div className="absolute left-0 top-full mt-2 w-72 bg-white rounded-xl border border-slate-200 shadow-card-lg z-50 p-2 max-h-96 overflow-y-auto">
+                  <div className="mb-1 px-3 py-2">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Networks</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    {POPULAR_CHAINS.map((chain) => (
+                      <button
+                        key={chain.chainId}
+                        onClick={() => handleChainSelect(chain)}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg transition-all text-xs flex items-center gap-3 ${
+                          chainId === chain.chainId
+                            ? "bg-brand-orange text-white shadow-sm"
+                            : "hover:bg-slate-50 text-slate-900"
+                        }`}
+                      >
+                        <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 overflow-hidden ${
+                          chainId === chain.chainId ? "bg-white/10" : "bg-slate-100"
+                        }`}>
+                          <img 
+                            src={chain.logo} 
+                            alt={chain.name}
+                            className="w-6 h-6 object-cover rounded-full"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `<span class="text-xs font-semibold ${chainId === chain.chainId ? 'text-white' : 'text-slate-700'}">${chain.name[0]}</span>`;
+                              }
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold truncate">{chain.name}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 mt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => {
+                        setShowCustomForm(!showCustomForm);
+                        if (!showCustomForm) {
+                          setTimeout(() => {
+                            customFormRef.current?.scrollIntoView({ 
+                              behavior: 'smooth', 
+                              block: 'nearest' 
+                            });
+                          }, 100);
+                        }
+                      }}
+                      className="w-full text-xs text-slate-500 hover:text-slate-900 flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {showCustomForm ? "Cancel" : "Custom RPC"}
+                    </button>
+
+                    {showCustomForm && (
+                      <div ref={customFormRef} className="space-y-2 mt-2 px-1">
+                        <input
+                          type="text"
+                          value={customName}
+                          onChange={(e) => setCustomName(e.target.value)}
+                          placeholder="Network Name"
+                          className="w-full px-3 py-2 text-base border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={customRpc}
+                          onChange={(e) => setCustomRpc(e.target.value)}
+                          placeholder="RPC URL"
+                          className="w-full px-3 py-2 text-base border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                        />
+                        <input
+                          type="number"
+                          value={customChainId}
+                          onChange={(e) => setCustomChainId(e.target.value)}
+                          placeholder="Chain ID"
+                          className="w-full px-3 py-2 text-base border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                        />
+                        <button
+                          onClick={handleCustomChain}
+                          disabled={!customRpc || !customChainId || !customName}
+                          className="w-full bg-brand-orange text-white text-base font-semibold py-2 px-3 rounded-lg hover:bg-brand-orange-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        >
+                          Add Network
+                        </button>
+                      </div>
+                    )}
+              </div>
+            </div>
+          )}
+          </div>
+          
+          {/* Theme Toggle */}
+          <ThemeToggle />
+        </div>
+
+        <button
+          onClick={disconnect}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-600 shadow-card hover:shadow-card-hover transition-all"
+          title="Disconnect"
+        >
+          <LogOut className="w-4 h-4" strokeWidth={2.5} />
+          <span className="text-base font-semibold">Disconnect</span>
+        </button>
+      </div>
+
+      {/* Wallet Selector - only show if multiple wallets available */}
+      {availableSmartWallets.length > 0 && (
+        <div className="bg-gradient-to-b from-white to-bg-base dark:from-slate-800 dark:to-slate-800 rounded-2xl border border-black/[0.04] dark:border-slate-700 shadow-card-lg p-4">
+          <WalletSelector compact={false} showLabel={true} />
+        </div>
+      )}
+
+      {/* Main Balance Card */}
+      <div className="bg-gradient-to-b from-white to-bg-base dark보다from-slate-800 dark:to-slate-800 rounded-2xl border border-black/[0.04] dark:border-slate-700 shadow-card-lg hover:shadow-card-hover transition-shadow p-5">
+          {/* Address Bar */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF6B35] flex-shrink-0 shadow-sm">
+                <div className="w-5 h-5 rounded-full bg-white dark:bg-slate-800" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-0.5">
+                  {isSmartWallet ? 'Smart Wallet Address' : 'Burner Card Address'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-mono font-semibold text-slate-900 dark:text-slate-100 token-opacity truncate">
+                    {isSmartWallet && smartWalletAddress ? formatAddress(smartWalletAddress) : address ? formatAddress(address) : ""}
+                  </p>
+                  <button
+                    onClick={() => {
+                      const addrToCopy = isSmartWallet && smartWalletAddress ? smartWalletAddress : address;
+                      if (addrToCopy) {
+                        navigator.clipboard.writeText(addrToCopy);
+                        setCopied(true);
+                        setToastMessage("Address copied!");
+                        setShowToast(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }
+                    }}
+                    className="text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 transition-colors flex-shrink-0"
+                    title={copied ? "Copied!" : "Copy address"}
+                  >
+                    {copied ? (
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <a
+              href={getExplorerUrl(chainId, isSmartWallet && smartWalletAddress ? smartWalletAddress : address || "")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              title="View on Explorer"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </div>
+
+          {/* Balance Display */}
+          <div className="mb-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mb-1.5 uppercase tracking-wide text-xs opacity-60">Total Balance</p>
+            <div className="flex items-baseline gap-2.5 mb-1">
+              <p className="text-4xl font-bold text-slate-900 dark:text-slate-100 balance-number">
+                {isLoadingBalance ? (
+                  <span className="text-slate-300 dark:text-slate-600">...</span>
+                ) : (
+                  formatBalance(balance)
+                )}
+              </p>
+              <p className="text-xl font-semibold text-slate-600 dark:text-slate-400 token-opacity">{getNativeTokenSymbol(chainId)}</p>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {isLoadingBalance ? (
+                "≈ $... USD"
+              ) : pricingEnabled && nativeTokenPrice > 0 ? (
+                `≈ $${(parseFloat(balance) * nativeTokenPrice).toFixed(2)} USD`
+              ) : (
+                <span className="text-slate-400 dark:text-slate-500">
+                  {pricingEnabled ? "Price unavailable" : "Pricing disabled (hosted version)"}
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowTokenSelector(true)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white transition-all duration-150 font-semibold text-base shadow-md hover:shadow-glow-orange active:scale-95"
+            >
+              <Send className="w-4 h-4" strokeWidth={2.5} />
+              Send
+            </button>
+
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed font-semibold text-base relative group"
+            >
+              <Repeat2 className="w-4 h-4" strokeWidth={2.5} />
+              Swap
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                Planned
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-900"></div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setShowReceiveModal(true)}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-800 dark:bg-slate-600 hover:bg-slate-700 dark:hover:bg-slate-500 text-white transition-all duration-150 font-semibold text-base shadow-md hover:shadow-lg active:scale-95"
+            >
+              <Download className="w-4 h-4" strokeWidth={2.5} />
+              Receive
+            </button>
+          </div>
+      </div>
+
+      {/* Smart Wallet Configuration */}
+      <SmartWalletConfig />
+
+      {/* Smart Wallet Owner Manager */}
+      <SmartWalletOwnerManager />
+
+      {/* NFT Manager */}
+      <NFTManager />
+
+      {/* Smart Wallet Balance & Gas Warning */}
+      {isSmartWallet && smartWalletAddress && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                Balance Smart Wallet
+              </h3>
+              <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+                {isLoadingBalance ? "..." : parseFloat(smartWalletBalance).toFixed(6)} {getNativeTokenSymbol(chainId)}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 font-mono break-all">
+                {smartWalletAddress}
+              </p>
+            </div>
+            
+            <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 rounded-lg p-3">
+              <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                ⚠️ Important: Gas fees
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-200">
+                Transactions are signed by your <strong>Burner card (Owner)</strong> which has <strong>{parseFloat(balance).toFixed(6)} {getNativeTokenSymbol(chainId)}</strong>.
+                You need ETH on this address to pay for gas, even if your funds are in the Smart Wallet!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receive Modal */}
+      {showReceiveModal && (
+        <div className="modal-overlay bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3" onClick={() => setShowReceiveModal(false)}>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 max-w-sm sm:max-w-md w-full shadow-card-lg mx-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">Receive <span className="text-brand-orange">Tokens</span></h2>
+              <button
+                onClick={() => setShowReceiveModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="mb-4 sm:mb-6">
+              <p className="text-xs sm:text-sm text-slate-600 mb-3 sm:mb-4">
+                Send only <span className="font-semibold">{chainName}</span> assets to this address. Sending assets from other networks will result in permanent loss.
+              </p>
+              
+              {/* QR Code */}
+              <div className="bg-white rounded-xl p-4 sm:p-6 mb-3 sm:mb-4 flex items-center justify-center border-2 border-slate-200">
+                <QRCodeSVG 
+                  value={address || ""}
+                  size={160}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              {/* Address Display */}
+              <div className="bg-slate-50 rounded-xl p-3 sm:p-4 border border-slate-200">
+                <p className="text-xs text-slate-500 font-medium mb-2">Your {chainName} Address</p>
+                <div className="flex items-center gap-2">
+                  <p className="flex-1 text-xs sm:text-sm font-mono font-semibold text-slate-900 break-all">
+                    {address}
+                  </p>
+                  <button
+                    onClick={handleCopyReceiveAddress}
+                    className="flex-shrink-0 p-1.5 sm:p-2 hover:bg-slate-200 rounded-lg transition-colors"
+                    title={receiveAddressCopied ? "Copied!" : "Copy address"}
+                  >
+                    {receiveAddressCopied ? (
+                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+                    ) : (
+                      <Copy className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowReceiveModal(false)}
+              className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-2.5 sm:py-3 px-4 rounded-xl transition-colors shadow-md hover:shadow-glow-orange text-sm sm:text-base"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Token List */}
+      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-black/[0.04] dark:border-slate-700 shadow-card hover:shadow-card-hover transition-shadow overflow-hidden">
+        <TokenList 
+          onSendToken={setSelectedToken} 
+          onRefresh={loadBalance}
+          onTokensLoaded={(tokens, images, prices) => {
+            setAvailableTokens(tokens);
+            setTokenImages(images);
+            setTokenPrices(prices);
+          }}
+        />
+      </div>
+
+      {/* Token Selector Modal */}
+      {showTokenSelector && (
+        <TokenSelector
+          tokens={availableTokens}
+          onSelectToken={setSelectedToken}
+          onClose={() => setShowTokenSelector(false)}
+          tokenImages={tokenImages}
+          tokenPrices={tokenPrices}
+        />
+      )}
+
+      {/* Send Token Modal */}
+      {selectedToken && (
+        <SendToken
+          token={selectedToken}
+          onClose={() => setSelectedToken(null)}
+          onSuccess={() => {
+            loadBalance();
+            setSelectedToken(null);
+          }}
+        />
+      )}
+
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage}
+        isVisible={showToast}
+        onClose={() => {
+          console.log('Toast onClose called');
+          setShowToast(false);
+        }}
+      />
+
+      {/* Footer Branding */}
+      <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-700/60">
+        <a 
+          href="https://openburner.xyz" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 opacity-50 hover:opacity-100 transition-opacity"
+        >
+          <Image 
+            src="/images/openburnerlogo.svg" 
+            alt="OpenBurner" 
+            width={16} 
+            height={16} 
+            className="w-4 h-4"
+          />
+          <span className="text-sm font-semibold text-slate-900 dark:text-slate-200">
+            Open<span className="text-[#FF6B35]">Burner</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  );
+}

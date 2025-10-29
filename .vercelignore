@@ -1,0 +1,26 @@
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Development files
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# Build artifacts
+.next/
+out/
+dist/
+
+# Dependencies
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional - can be deployed if needed)
+# /docs
+

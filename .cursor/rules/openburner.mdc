@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+Do not deploy changes (git push) unless instructed by the user.
