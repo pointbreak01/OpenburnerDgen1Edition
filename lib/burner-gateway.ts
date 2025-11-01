@@ -636,3 +636,31 @@ export async function signTransactionWithGateway(
     throw new Error(error.message || "Failed to sign transaction via gateway");
   }
 }
+
+/**
+ * Sign an arbitrary 32-byte digest with the Burner card via Gateway (for messages / typed data)
+ */
+export async function signDigestWithGateway(
+  gate: HaloGateway,
+  digestHex: string,
+  keySlot: number = 1,
+  pin?: string
+): Promise<string> {
+  if (!digestHex || !digestHex.startsWith('0x') || digestHex.length !== 66) {
+    throw new Error('Invalid digest: must be a 32-byte hex string');
+  }
+  try {
+    // Mirror Send flow: assume gateway is connected after initial pairing
+    const command: any = { name: 'sign', keyNo: keySlot, digest: digestHex.slice(2) };
+    if (pin) command.password = pin;
+    console.log('[Gateway] signDigestWithGateway: sending sign command');
+    const result: any = await gate.execHaloCmd(command);
+    const sig = result.signature?.raw || result.signature;
+    const signature = ethers.Signature.from({ r: '0x' + sig.r, s: '0x' + sig.s, v: sig.v });
+    console.log('[Gateway] signDigestWithGateway: signature received');
+    return signature.serialized;
+  } catch (error: any) {
+    console.error('Error signing digest via Gateway:', error);
+    throw new Error(error?.message || 'Failed to sign digest via Gateway');
+  }
+}

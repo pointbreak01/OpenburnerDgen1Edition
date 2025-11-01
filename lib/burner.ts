@@ -318,3 +318,56 @@ export async function signTransactionWithBurner(
   }
 }
 
+/**
+ * Sign an arbitrary 32-byte digest with the Burner card (for messages / typed data)
+ */
+export async function signDigestWithBurner(
+  digestHex: string,
+  keySlot: number = 1,
+  pin?: string
+): Promise<string> {
+  try {
+    if (!digestHex || !digestHex.startsWith("0x") || digestHex.length !== 66) {
+      throw new Error("Invalid digest: must be a 32-byte hex string");
+    }
+    await connectToBridge();
+    const command: any = { name: "sign", keyNo: keySlot, digest: digestHex.slice(2) };
+    if (pin) command.password = pin;
+    const result = await execBridgeCommand(command);
+    const sig = result.signature.raw || result.signature;
+    const signature = ethers.Signature.from({ r: "0x" + sig.r, s: "0x" + sig.s, v: sig.v });
+    return signature.serialized;
+  } catch (error: any) {
+    console.error("Error signing digest with Burner card:", error);
+    throw new Error(error.message || "Failed to sign digest");
+  } finally {
+    disconnectBridge();
+  }
+}
+
+/**
+ * Sign EIP-712 typed data v4
+ */
+export async function signTypedDataWithBurner(
+  domain: any,
+  types: Record<string, Array<any>>, // EIP-712 types
+  message: any,
+  keySlot: number = 1,
+  pin?: string
+): Promise<string> {
+  const digest = ethers.TypedDataEncoder.hash(domain, types as any, message);
+  return signDigestWithBurner(digest, keySlot, pin);
+}
+
+/**
+ * Sign personal message (EIP-191)
+ */
+export async function signPersonalMessageWithBurner(
+  message: string,
+  keySlot: number = 1,
+  pin?: string
+): Promise<string> {
+  const digest = ethers.hashMessage(message);
+  return signDigestWithBurner(digest, keySlot, pin);
+}
+

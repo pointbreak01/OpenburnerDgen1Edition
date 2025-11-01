@@ -11,12 +11,14 @@ import { NFTManager } from "../nft-manager";
 import { WalletSelector } from "../wallet-selector";
 import { SmartWalletOwnerManager } from "../smart-wallet-owner-manager";
 import { ethers } from "ethers";
-import { Copy, LogOut, CheckCircle, ChevronDown, Plus, Network, Send, Download, Repeat2, QrCode, ExternalLink, X, Wallet } from "lucide-react";
+import { Copy, LogOut, CheckCircle, ChevronDown, Plus, Network, Send, Download, QrCode, ExternalLink, X, Wallet, Link2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { getTokenPrice } from "@/lib/price-oracle";
 import { getAppConfig } from "@/lib/config/environment";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import Image from "next/image";
+import { createPairing, openWalletConnectQr, subscribeWalletConnectHandlers, pairFromUri, setWalletConnectPinProvider, setWalletConnectTxConfirmationProvider, WalletConnectTxConfirmation } from "@/lib/walletconnect";
+import { PinInput } from "@/components/pin-input";
 
 interface Token {
   address: string;
@@ -109,6 +111,29 @@ export function WalletDashboard() {
   const [availableTokens, setAvailableTokens] = useState<Token[]>([]);
   const [tokenImages, setTokenImages] = useState<{ [symbol: string]: string }>({});
   const [tokenPrices, setTokenPrices] = useState<{ [symbol: string]: number }>({});
+  const [wcConnecting, setWcConnecting] = useState(false);
+  const [wcError, setWcError] = useState<string | null>(null);
+  const [showWcModal, setShowWcModal] = useState(false);
+  const [wcMode, setWcMode] = useState<"qr" | "uri" | null>(null);
+  const [wcUri, setWcUri] = useState("");
+  const [wcPinVisible, setWcPinVisible] = useState(false);
+  const wcPinResolverRef = useRef<((pin?: string) => void) | null>(null);
+  const [wcTxConfirmation, setWcTxConfirmation] = useState<WalletConnectTxConfirmation | null>(null);
+
+  useEffect(() => {
+    // install pin provider for WalletConnect flows
+    setWalletConnectPinProvider(() => {
+      return new Promise<string | undefined>((resolve) => {
+        wcPinResolverRef.current = resolve;
+        setWcPinVisible(true);
+      });
+    });
+
+    // install tx confirmation provider for WalletConnect flows
+    setWalletConnectTxConfirmationProvider((confirmation) => {
+      setWcTxConfirmation(confirmation);
+    });
+  }, []);
 
   useEffect(() => {
     console.log("\n═══════════════════════════════════════════════════════");
@@ -244,6 +269,55 @@ export function WalletDashboard() {
     setShowNetworkDropdown(false);
   }
 
+  function handleWalletConnect() {
+    setWcError(null);
+    setWcMode(null);
+    setWcUri("");
+    setShowWcModal(true);
+  }
+
+  async function handleWcShowQr() {
+    try {
+      setWcError(null);
+      setWcConnecting(true);
+      const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID as string;
+      if (!projectId) throw new Error("NEXT_PUBLIC_WC_PROJECT_ID is not set");
+      await subscribeWalletConnectHandlers(projectId, (cid: number) => {
+        if (cid === chainId) return new ethers.JsonRpcProvider(rpcUrl);
+        return new ethers.JsonRpcProvider(rpcUrl);
+      });
+      const uri = await createPairing(projectId);
+      if (uri) openWalletConnectQr(uri);
+      setShowWcModal(false);
+    } catch (e: any) {
+      setWcError(e.message || "WalletConnect error");
+    } finally {
+      setWcConnecting(false);
+    }
+  }
+
+  async function handleWcPasteUriSubmit() {
+    try {
+      setWcError(null);
+      setWcConnecting(true);
+      const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID as string;
+      if (!projectId) throw new Error("NEXT_PUBLIC_WC_PROJECT_ID is not set");
+      const trimmed = wcUri.trim();
+      if (!trimmed) throw new Error("Please paste a WalletConnect URI");
+      if (!trimmed.startsWith("wc:")) throw new Error("Invalid WalletConnect URI (must start with wc:)");
+      await subscribeWalletConnectHandlers(projectId, (cid: number) => {
+        if (cid === chainId) return new ethers.JsonRpcProvider(rpcUrl);
+        return new ethers.JsonRpcProvider(rpcUrl);
+      });
+      await pairFromUri(projectId, trimmed);
+      setShowWcModal(false);
+    } catch (e: any) {
+      setWcError(e.message || "WalletConnect error");
+    } finally {
+      setWcConnecting(false);
+    }
+  }
+
   function getExplorerUrl(chainId: number, address: string): string {
     const baseUrl = BLOCK_EXPLORERS[chainId] || "https://etherscan.io";
     return `${baseUrl}/address/${address}`;
@@ -259,14 +333,14 @@ export function WalletDashboard() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 sm:space-y-3">
       {/* Header with Network, Theme Toggle & Disconnect */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <div className="relative network-dropdown">
             <button
               onClick={() => setShowNetworkDropdown(!showNetworkDropdown)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover hover:border-brand-orange/30 dark:hover:border-brand-primary/40 transition-all"
+              className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover hover:border-brand-orange/30 dark:hover:border-brand-primary/40 transition-all"
             >
               <div className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100">
                 {(() => {
@@ -290,12 +364,12 @@ export function WalletDashboard() {
                   );
                 })()}
               </div>
-              <span className="font-semibold text-base text-slate-900 dark:text-dgen1-text">{chainName}</span>
+              <span className="font-semibold text-sm sm:text-base text-slate-900 dark:text-dgen1-text truncate">{chainName}</span>
               <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${showNetworkDropdown ? "rotate-180" : ""}`} />
             </button>
           
           {showNetworkDropdown && (
-            <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-dgen1-surface rounded-xl border border-slate-200 dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card z-50 p-2 max-h-96 overflow-y-auto">
+            <div className="absolute left-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-72 max-w-[calc(100vw-2rem)] sm:max-w-none bg-white dark:bg-dgen1-surface rounded-xl border border-slate-200 dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card z-50 p-2 max-h-96 overflow-y-auto">
                   <div className="mb-1 px-3 py-2">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Networks</p>
                   </div>
@@ -396,35 +470,36 @@ export function WalletDashboard() {
 
         <button
           onClick={disconnect}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border text-slate-600 dark:text-dgen1-text-muted hover:text-slate-900 dark:hover:text-brand-primary hover:border-slate-300 dark:hover:border-brand-primary/40 shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-all"
+          className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border text-slate-600 dark:text-dgen1-text-muted hover:text-slate-900 dark:hover:text-brand-primary hover:border-slate-300 dark:hover:border-brand-primary/40 shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-all"
           title="Disconnect"
         >
           <LogOut className="w-4 h-4" strokeWidth={2.5} />
-          <span className="text-base font-semibold">Disconnect</span>
+          <span className="text-sm sm:text-base font-semibold hidden sm:inline">Disconnect</span>
+          <span className="text-sm sm:text-base font-semibold sm:hidden">DC</span>
         </button>
       </div>
 
       {/* Wallet Selector - only show if multiple wallets available */}
       {availableSmartWallets.length > 0 && (
-        <div className="bg-gradient-to-b from-white to-bg-base dark:from-slate-800 dark:to-slate-800 rounded-2xl border border-black/[0.04] dark:border-slate-700 shadow-card-lg p-4">
+        <div className="bg-gradient-to-b from-white to-bg-base dark:from-slate-800 dark:to-slate-800 rounded-2xl border border-black/[0.04] dark:border-slate-700 shadow-card-lg p-3 sm:p-4">
           <WalletSelector compact={false} showLabel={true} />
         </div>
       )}
 
       {/* Main Balance Card */}
-      <div className="bg-gradient-to-b from-white to-bg-base dark:from-dgen1-surface dark:to-dgen1-surface rounded-2xl border border-black/[0.04] dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-shadow p-5">
+      <div className="bg-gradient-to-b from-white to-bg-base dark:from-dgen1-surface dark:to-dgen1-surface rounded-2xl border border-black/[0.04] dark:border-dgen1-border shadow-card-lg dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover transition-shadow p-4 sm:p-5">
           {/* Address Bar */}
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-dgen1-border">
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF6B35] dark:bg-brand-primary flex-shrink-0 shadow-sm dark:shadow-glow-primary">
-                <div className="w-5 h-5 rounded-full bg-white dark:bg-dgen1-bg" />
+          <div className="flex items-center justify-between mb-3 sm:mb-4 pb-3 sm:pb-4 border-b border-slate-100 dark:border-dgen1-border">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+              <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#FF6B35] dark:bg-brand-primary flex-shrink-0 shadow-sm dark:shadow-glow-primary">
+                <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white dark:bg-dgen1-bg" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-500 dark:text-dgen1-text-muted font-medium mb-0.5">
+                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-dgen1-text-muted font-medium mb-0.5">
                   {isSmartWallet ? 'Smart Wallet Address' : 'Burner Card Address'}
                 </p>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono font-semibold text-slate-900 dark:text-dgen1-text token-opacity truncate">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <p className="text-xs sm:text-sm font-mono font-semibold text-slate-900 dark:text-dgen1-text token-opacity truncate">
                     {isSmartWallet && smartWalletAddress ? formatAddress(smartWalletAddress) : address ? formatAddress(address) : ""}
                   </p>
                   <button
@@ -462,19 +537,19 @@ export function WalletDashboard() {
           </div>
 
           {/* Balance Display */}
-          <div className="mb-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold mb-1.5 uppercase tracking-wide text-xs opacity-60">Total Balance</p>
-            <div className="flex items-baseline gap-2.5 mb-1">
-              <p className="text-4xl font-bold text-slate-900 dark:text-dgen1-text balance-number">
+          <div className="mb-3 sm:mb-4">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-semibold mb-1.5 uppercase tracking-wide opacity-60">Total Balance</p>
+            <div className="flex items-baseline gap-2 sm:gap-2.5 mb-1">
+              <p className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-dgen1-text balance-number">
                 {isLoadingBalance ? (
                   <span className="text-slate-300 dark:text-slate-600">...</span>
                 ) : (
                   formatBalance(balance)
                 )}
               </p>
-              <p className="text-xl font-semibold text-slate-600 dark:text-slate-400 token-opacity">{getNativeTokenSymbol(chainId)}</p>
+              <p className="text-lg sm:text-xl font-semibold text-slate-600 dark:text-slate-400 token-opacity">{getNativeTokenSymbol(chainId)}</p>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               {isLoadingBalance ? (
                 "≈ $... USD"
               ) : pricingEnabled && nativeTokenPrice > 0 ? (
@@ -488,36 +563,99 @@ export function WalletDashboard() {
           </div>
 
           {/* Quick Actions */}
-          <div className="flex gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
             <button
               onClick={() => setShowTokenSelector(true)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white transition-all duration-150 font-semibold text-base shadow-md hover:shadow-glow-orange active:scale-95"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white transition-all duration-150 font-semibold text-sm sm:text-base shadow-md hover:shadow-glow-orange active:scale-95"
             >
               <Send className="w-4 h-4" strokeWidth={2.5} />
-              Send
+              <span className="hidden sm:inline">Send</span>
+              <span className="sm:hidden">Send</span>
             </button>
 
             <button
-              disabled
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed font-semibold text-base relative group"
+              onClick={handleWalletConnect}
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border text-slate-700 dark:text-dgen1-text hover:text-slate-900 hover:border-slate-300 dark:hover:text-brand-primary/60 transition-all duration-150 font-semibold text-sm sm:text-base shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover active:scale-95"
             >
-              <Repeat2 className="w-4 h-4" strokeWidth={2.5} />
-              Swap
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                Planned
-                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-900"></div>
-              </div>
+              <Link2 className="w-4 h-4" strokeWidth={2.5} />
+              <span className="hidden sm:inline">WalletConnect <span className="text-xs opacity-70">(beta)</span></span>
+              <span className="sm:hidden">WC <span className="text-xs opacity-70">(β)</span></span>
             </button>
 
             <button
               onClick={() => setShowReceiveModal(true)}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-800 dark:bg-slate-600 hover:bg-slate-700 dark:hover:bg-slate-500 text-white transition-all duration-150 font-semibold text-base shadow-md hover:shadow-lg active:scale-95"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-slate-800 dark:bg-slate-600 hover:bg-slate-700 dark:hover:bg-slate-500 text-white transition-all duration-150 font-semibold text-sm sm:text-base shadow-md hover:shadow-lg active:scale-95"
             >
               <Download className="w-4 h-4" strokeWidth={2.5} />
-              Receive
+              <span className="hidden sm:inline">Receive</span>
+              <span className="sm:hidden">Receive</span>
             </button>
           </div>
       </div>
+
+      {/* WalletConnect Modal */}
+      {showWcModal && (
+        <div className="modal-overlay bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3" onClick={() => setShowWcModal(false)}>
+          <div className="bg-white dark:bg-dgen1-surface rounded-2xl p-4 sm:p-6 max-w-sm sm:max-w-md w-full shadow-card-lg mx-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-dgen1-text">Connect with <span className="text-brand-orange">WalletConnect</span></h2>
+              <button onClick={() => setShowWcModal(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => { setWcMode("qr"); handleWcShowQr(); }}
+                disabled={wcConnecting}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-white dark:bg-dgen1-surface border border-slate-200 dark:border-dgen1-border text-slate-700 dark:text-dgen1-text hover:text-slate-900 hover:border-slate-300 dark:hover:text-brand-primary/60 transition-all duration-150 font-semibold text-base shadow-card dark:shadow-dgen1-card hover:shadow-card-hover dark:hover:shadow-dgen1-card-hover disabled:opacity-50"
+              >
+                <QrCode className="w-4 h-4" />
+                {wcConnecting && wcMode === "qr" ? "Generating QR..." : "Show QR for dApp to scan"}
+              </button>
+
+              <div className="text-center text-xs text-slate-400">or</div>
+
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={wcUri}
+                  onChange={(e) => setWcUri(e.target.value)}
+                  placeholder="Paste wc: URI from dApp"
+                  className="w-full px-3 py-2 text-base border border-slate-200 dark:border-dgen1-border rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent bg-white dark:bg-dgen1-surface text-slate-900 dark:text-dgen1-text"
+                />
+                <button
+                  onClick={() => { setWcMode("uri"); handleWcPasteUriSubmit(); }}
+                  disabled={wcConnecting}
+                  className="w-full bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold py-2.5 px-4 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {wcConnecting && wcMode === "uri" ? "Connecting..." : "Connect using URI"}
+                </button>
+              </div>
+
+              {wcError && (
+                <div className="text-xs text-red-600 dark:text-red-400">{wcError}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PIN modal for WalletConnect */}
+      <PinInput
+        isVisible={wcPinVisible}
+        error={null}
+        onCancel={() => {
+          setWcPinVisible(false);
+          wcPinResolverRef.current?.(undefined);
+          wcPinResolverRef.current = null;
+        }}
+        onSubmit={(pin) => {
+          setWcPinVisible(false);
+          wcPinResolverRef.current?.(pin);
+          wcPinResolverRef.current = null;
+        }}
+      />
 
       {/* Smart Wallet Configuration */}
       <SmartWalletConfig />
@@ -664,6 +802,87 @@ export function WalletDashboard() {
           setShowToast(false);
         }}
       />
+
+      {/* WalletConnect Error */}
+      {wcError && (
+        <div className="mt-3 text-xs text-red-600 dark:text-red-400">{wcError}</div>
+      )}
+
+      {/* WalletConnect Transaction Confirmation Dialog */}
+      {wcTxConfirmation && (
+        <div className="modal-overlay bg-black/60 flex items-center justify-center p-3 z-50 backdrop-blur-sm" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-card-lg p-4 sm:p-6 max-w-sm sm:max-w-md w-full mx-2">
+            {/* Success Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-10 h-10 sm:w-12 sm:h-12 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+
+            {/* Success Message */}
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white text-center mb-2">
+              Transaction <span className="text-brand-orange">Confirmed!</span>
+            </h2>
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 text-center mb-4 sm:mb-6">
+              Your transaction via <span className="font-semibold text-slate-900 dark:text-white">{wcTxConfirmation.dAppName || "dApp"}</span> has been sent successfully
+            </p>
+
+            {/* Transaction Details */}
+            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
+              <div className="space-y-2 sm:space-y-3">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Transaction Hash</p>
+                  <p className="text-xs sm:text-sm font-mono text-slate-900 dark:text-slate-100 break-all">
+                    {wcTxConfirmation.txHash}
+                  </p>
+                </div>
+                {wcTxConfirmation.to && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">To</p>
+                    <p className="text-xs sm:text-sm font-mono text-slate-900 dark:text-slate-100 break-all">
+                      {wcTxConfirmation.to}
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Network</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {chainName || `Chain ${wcTxConfirmation.chainId}`}
+                  </p>
+                </div>
+                {wcTxConfirmation.value && BigInt(wcTxConfirmation.value) > 0n && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Value</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {ethers.formatEther(wcTxConfirmation.value)} ETH
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 sm:space-y-3">
+              <a
+                href={`${BLOCK_EXPLORERS[wcTxConfirmation.chainId] || "https://etherscan.io"}/tx/${wcTxConfirmation.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-brand-orange hover:bg-brand-orange-dark text-white rounded-xl transition-all duration-150 font-semibold shadow-md hover:shadow-glow-orange active:scale-95 text-sm sm:text-base"
+              >
+                View on Block Explorer
+                <ExternalLink className="w-4 h-4" strokeWidth={2.5} />
+              </a>
+              
+              <button
+                onClick={() => setWcTxConfirmation(null)}
+                className="w-full px-4 sm:px-6 py-2.5 sm:py-3 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-brand-orange/30 transition-all duration-150 font-semibold active:scale-95 text-sm sm:text-base"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer Branding */}
       <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-700/60">
